@@ -62,18 +62,32 @@ top_c1, top_c2, top_c3 = st.columns([2, 2, 4])
 
 with top_c1:
     selected_symbol = st.selectbox("Select Symbol / Stock", FNO_SYMBOLS)
+
+# --- INSTRUMENT KEY RESOLUTION HELPER ---
+@st.cache_data(ttl=86400)
+def get_instrument_key(symbol):
+    if symbol == "NIFTY":
+        return "NSE_INDEX|Nifty 50"
+    elif symbol == "BANKNIFTY":
+        return "NSE_INDEX|Nifty Bank"
+    elif symbol == "FINNIFTY":
+        return "NSE_INDEX|Nifty Financial Services"
+    elif symbol == "SENSEX":
+        return "BSE_INDEX|SENSEX"
     
-    # Map Symbol to Upstox Instrument Key Format
-    if selected_symbol == "NIFTY":
-        instrument_key = "NSE_INDEX|Nifty 50"
-    elif selected_symbol == "BANKNIFTY":
-        instrument_key = "NSE_INDEX|Nifty Bank"
-    elif selected_symbol == "FINNIFTY":
-        instrument_key = "NSE_INDEX|Nifty Financial Services"
-    elif selected_symbol == "SENSEX":
-        instrument_key = "BSE_INDEX|SENSEX"
-    else:
-        instrument_key = f"NSE_EQ|{selected_symbol}"
+    # Fetch exact equity instrument key from Upstox Master JSON
+    try:
+        url = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
+        df_inst = pd.read_json(url)
+        match = df_inst[(df_inst['trading_symbol'] == symbol) & (df_inst['instrument_type'] == 'EQ')]
+        if not match.empty:
+            return match.iloc[0]['instrument_key']
+    except Exception:
+        pass
+    
+    return f"NSE_EQ|{symbol}"
+
+instrument_key = get_instrument_key(selected_symbol)
 
 @st.cache_data(ttl=60)
 def fetch_expiry_dates(inst_key):
@@ -86,7 +100,7 @@ def fetch_expiry_dates(inst_key):
 
 expiries = fetch_expiry_dates(instrument_key)
 if not expiries:
-    st.error("Failed to fetch expiry dates for this symbol. Please check if options are available.")
+    st.error(f"Failed to fetch expiry dates for {selected_symbol}. Please check if options are available for this symbol.")
     st.stop()
 
 with top_c2:
@@ -209,7 +223,7 @@ def render_dashboard():
                     {'range': [65, 100], 'color': '#ccffcc'}
                 ],
             },
-            title={'text': f"<b>{sentiment}</b><br><span style='font-size:10px; color:gray'>Strong bullish conditions</span>", 'font': {'size': 14}}
+            title={'text': f"<b>{sentiment}</b><br><span style='font-size:10px; color:gray'>Strong conditions</span>", 'font': {'size': 14}}
         ))
         fig_gauge.update_layout(height=210, margin=dict(l=10, r=10, t=30, b=10))
         st.plotly_chart(fig_gauge, use_container_width=True, key="gauge_chart")
