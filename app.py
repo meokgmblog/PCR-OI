@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Upstox Advanced OI Dashboard",
+    page_title="Advanced OI Dashboard",
     page_icon="📈",
     layout="wide"
 )
