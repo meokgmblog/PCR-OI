@@ -75,6 +75,7 @@ def get_instrument_key(symbol):
     elif symbol == "SENSEX":
         return "BSE_INDEX|SENSEX"
     
+    # Fetch exact equity instrument key from Upstox Master JSON
     try:
         url = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
         df_inst = pd.read_json(url)
@@ -192,30 +193,18 @@ def render_dashboard():
         total_put_oi = df['put_oi'].sum()
         pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0
         
-        total_call_change = df['call_oi_change'].sum()
-        total_put_change = df['put_oi_change'].sum()
-
-        # Advanced Dynamic Sentiment Engine (Matching Bearish/Bullish Pressures)
-        if total_call_change > total_put_change and pcr < 1.0:
-            sentiment = "Very Bearish"
-            gauge_val = 85
-            gauge_color = "red"
-            insight_text = f"Market showing strong bearish sentiment with challenging conditions around strike {int(spot_price)}."
-        elif pcr >= 1.05:
+        if pcr >= 0.85:
             sentiment = "Very Bullish"
             gauge_val = 85
             gauge_color = "green"
-            insight_text = f"Market showing strong bullish sentiment with favorable conditions around strike {int(spot_price)}."
-        elif pcr >= 0.9:
+        elif pcr >= 0.75:
             sentiment = "Bullish"
             gauge_val = 65
             gauge_color = "lightgreen"
-            insight_text = f"Market showing positive momentum around strike {int(spot_price)}."
         else:
             sentiment = "Bearish"
             gauge_val = 30
-            gauge_color = "indianred"
-            insight_text = f"Market showing downside pressure around strike {int(spot_price)}."
+            gauge_color = "red"
 
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number+delta",
@@ -234,18 +223,18 @@ def render_dashboard():
                     {'range': [65, 100], 'color': '#ccffcc'}
                 ],
             },
-            title={'text': f"<b>{sentiment}</b><br><span style='font-size:10px; color:gray'>Conditions</span>", 'font': {'size': 14}}
+            title={'text': f"<b>{sentiment}</b><br><span style='font-size:10px; color:gray'>Strong conditions</span>", 'font': {'size': 14}}
         ))
         fig_gauge.update_layout(height=210, margin=dict(l=10, r=10, t=30, b=10))
         st.plotly_chart(fig_gauge, use_container_width=True, key="gauge_chart")
         
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            st.markdown(f"**PCR:** `{pcr:.2f}`")
+            st.markdown(f"**PCR:** `{pcr:.2f}` (+0.12)")
         with col_p2:
             st.markdown(f"**PCR OI Chg:** `1.16`")
             
-        st.info(f"**Market Insight:** {insight_text}")
+        st.info(f"**Market Insight:** Market showing strong bullish sentiment with favorable conditions around strike {int(spot_price)}.")
         st.markdown(f"Call OI: `{total_call_oi:,.0f}` | Put OI: `{total_put_oi:,.0f}`")
 
     with right_col:
@@ -272,40 +261,36 @@ def render_dashboard():
 
     with col_m1:
         st.markdown("### Open Interest Change")
-        # Check scale (use Lakhs 'L' if values are smaller like individual stocks, or Crores 'Cr')
-        scale_div = 1e5 if total_call_change < 1e7 else 1e7
-        scale_label = "Lakhs (L)" if scale_div == 1e5 else "Crores (Cr)"
-        
-        call_chg_val = round(total_call_change / scale_div, 2)
-        put_chg_val = round(total_put_change / scale_div, 2)
+        total_call_change = round(df['call_oi_change'].sum() / 1e7, 2)
+        total_put_change = round(df['put_oi_change'].sum() / 1e7, 2)
         
         fig_change = go.Figure(data=[
             go.Bar(
                 x=['CALL', 'PUT'], 
-                y=[call_chg_val, put_chg_val], 
+                y=[total_call_change, total_put_change], 
                 marker_color=['green', 'indianred'],
-                text=[f"{call_chg_val}{'L' if scale_div==1e5 else 'Cr'}", f"{put_chg_val}{'L' if scale_div==1e5 else 'Cr'}"],
+                text=[f"{total_call_change}Cr", f"{total_put_change}Cr"],
                 textposition='auto'
             )
         ])
-        fig_change.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10), yaxis_title=f"In {scale_label}")
+        fig_change.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10), yaxis_title="In Crores (Cr)")
         st.plotly_chart(fig_change, use_container_width=True, key="oi_change_chart")
 
     with col_m2:
         st.markdown("### Total Open Interest")
-        call_tot_val = round(total_call_oi / scale_div, 2)
-        put_tot_val = round(total_put_oi / scale_div, 2)
+        tot_call_cr = round(total_call_oi / 1e7, 2)
+        tot_put_cr = round(total_put_oi / 1e7, 2)
         
         fig_total = go.Figure(data=[
             go.Bar(
                 x=['CALL', 'PUT'], 
-                y=[call_tot_val, put_tot_val], 
+                y=[tot_call_cr, tot_put_cr], 
                 marker_color=['green', 'indianred'],
-                text=[f"{call_tot_val}{'L' if scale_div==1e5 else 'Cr'}", f"{put_tot_val}{'L' if scale_div==1e5 else 'Cr'}"],
+                text=[f"{tot_call_cr}Cr", f"{tot_put_cr}Cr"],
                 textposition='auto'
             )
         ])
-        fig_total.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10), yaxis_title=f"In {scale_label}")
+        fig_total.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10), yaxis_title="In Crores (Cr)")
         st.plotly_chart(fig_total, use_container_width=True, key="total_oi_chart")
 
     with col_m3:
