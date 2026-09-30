@@ -18,18 +18,62 @@ headers = {
     "Authorization": f"Bearer {DEFAULT_TOKEN}"
 }
 
+# --- COMPLETE F&O STOCKS & INDICES LIST ---
+FNO_SYMBOLS = [
+    "NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX",
+    "360ONE", "ABB", "ABCAPITAL", "ADANIENSOL", "ADANIENT", "ADANIGREEN", 
+    "ADANIPORTS", "ADANIPOWER", "ALKEM", "AMBER", "AMBUJACEM", "ANGELONE", 
+    "APLAPOLLO", "APOLLOHOSP", "ASHOKLEY", "ASIANPAINT", "ASTRAL", "AUBANK", 
+    "AUROPHARMA", "AXISBANK", "BAJAJ-AUTO", "BAJAJFINSV", "BAJAJHLDNG", 
+    "BAJFINANCE", "BANDHANBNK", "BANKBARODA", "BANKINDIA", "BDL", "BEL", 
+    "BHARATFORG", "BHARTIARTL", "BHEL", "BIOCON", "BLUESTARCO", "BOSCHLTD", 
+    "BPCL", "BRITANNIA", "BSE", "CAMS", "CANBK", "CDSL", "CGPOWER", 
+    "CHOLAFIN", "CIPLA", "COALINDIA", "COCHINSHIP", "COFORGE", "COLPAL", 
+    "CONCOR", "CROMPTON", "CUMMINSIND", "DABUR", "DALBHARAT", "DELHIVERY", 
+    "DIVISLAB", "DIXON", "DLF", "DMART", "DRREDDY", "EICHERMOT", "ETERNAL", 
+    "EXIDEIND", "FEDERALBNK", "FORCEMOT", "FORTIS", "GAIL", "GLENMARK", 
+    "GMRAIRPORT", "GODFRYPHLP", "GODREJCP", "GODREJPROP", "GRASIM", "GVT&D", 
+    "HAL", "HAVELLS", "HCLTECH", "HDFCAMC", "HDFCBANK", "HDFCLIFE", 
+    "HEROMOTOCO", "HINDALCO", "HINDPETRO", "HINDUNILVR", "HINDZINC", "HYUNDAI", 
+    "ICICIBANK", "ICICIGI", "ICICIPRULI", "IDEA", "IDFCFIRSTB", "IEX", 
+    "INDHOTEL", "INDIANB", "INDIGO", "INDUSINDBK", "INDUSTOWER", "INFY", 
+    "INOXWIND", "IOC", "IREDA", "IRFC", "ITC", "JINDALSTEL", "JIOFIN", 
+    "JSWENERGY", "JSWSTEEL", "JUBLFOOD", "KALYANKJIL", "KAYNES", "KEI", 
+    "KFINTECH", "KOTAKBANK", "KPITTECH", "LAURUSLABS", "LICHSGFIN", "LICI", 
+    "LODHA", "LT", "LTF", "LTM", "LUPIN", "M&M", "MANAPPURAM", "MANKIND", 
+    "MARICO", "MARUTI", "MAXHEALTH", "MAZDOCK", "MCX", "MFSL", "MOTHERSON", 
+    "MOTILALOFS", "MPHASIS", "MUTHOOTFIN", "NAM-INDIA", "NATIONALUM", "NAUKRI", 
+    "NBCC", "NESTLEIND", "NHPC", "NMDC", "NTPC", "NUVAMA", "NYKAA", "OBEROIRLTY", 
+    "OFSS", "OIL", "ONGC", "PAGEIND", "PATANJALI", "PAYTM", "PERSISTENT", 
+    "PETRONET", "PFC", "PGEL", "PHOENIXLTD", "PIDILITIND", "PIIND", "PNB", 
+    "PNBHOUSING", "POLICYBZR", "POLYCAB", "POWERGRID", "POWERINDIA", 
+    "PREMIERENE", "PRESTIGE", "RADICO", "RBLBANK", "RECLTD", "RELIANCE", 
+    "RVNL", "SAIL", "SAMMAANCAP", "SBICARD", "SBILIFE", "SBIN", "SHREECEM", 
+    "SHRIRAMFIN", "SIEMENS", "SOLARINDS", "SONACOMS", "SRF", "SUNPHARMA", 
+    "SUPREMEIND", "SUZLON", "SWIGGY", "TATACONSUM", "TATAELXSI", "TATAPOWER", 
+    "TATASTEEL", "TCS", "TECHM", "TIINDIA", "TITAN", "TMPV", "TORNTPHARM", 
+    "TRENT", "TVSMOTOR", "ULTRACEMCO", "UNIONBANK", "UNITDSPR", "UNOMINDA", 
+    "UPL", "VBL", "VEDL", "VMM", "VOLTAS", "WAAREEENER", "WIPRO", "YESBANK", "ZYDUSLIFE"
+]
+
 # --- TOP CONTROLS HEADER ---
 st.markdown("### 📈 Upstox Advanced OI Dashboard")
 top_c1, top_c2, top_c3 = st.columns([2, 2, 4])
 
 with top_c1:
-    index_choice = st.selectbox("Select Index", ["NIFTY", "BANKNIFTY", "FINNIFTY"])
-    instrument_key_map = {
-        "NIFTY": "NSE_INDEX|Nifty 50",
-        "BANKNIFTY": "NSE_INDEX|Nifty Bank",
-        "FINNIFTY": "NSE_INDEX|Nifty Financial Services"
-    }
-    instrument_key = instrument_key_map[index_choice]
+    selected_symbol = st.selectbox("Select Symbol / Stock", FNO_SYMBOLS)
+    
+    # Map Symbol to Upstox Instrument Key Format
+    if selected_symbol == "NIFTY":
+        instrument_key = "NSE_INDEX|Nifty 50"
+    elif selected_symbol == "BANKNIFTY":
+        instrument_key = "NSE_INDEX|Nifty Bank"
+    elif selected_symbol == "FINNIFTY":
+        instrument_key = "NSE_INDEX|Nifty Financial Services"
+    elif selected_symbol == "SENSEX":
+        instrument_key = "BSE_INDEX|SENSEX"
+    else:
+        instrument_key = f"NSE_EQ|{selected_symbol}"
 
 @st.cache_data(ttl=60)
 def fetch_expiry_dates(inst_key):
@@ -42,7 +86,7 @@ def fetch_expiry_dates(inst_key):
 
 expiries = fetch_expiry_dates(instrument_key)
 if not expiries:
-    st.error("Failed to fetch expiry dates. Please check your network connection.")
+    st.error("Failed to fetch expiry dates for this symbol. Please check if options are available.")
     st.stop()
 
 with top_c2:
@@ -121,7 +165,7 @@ def render_dashboard():
     # Top Metrics Bar
     col_h1, col_h2 = st.columns([2, 8])
     with col_h1:
-        st.markdown(f"### 🔵 {index_choice}")
+        st.markdown(f"### 🔵 {selected_symbol}")
     with col_h2:
         st.markdown(f"#### Spot: **{spot_price:,.2f}** &nbsp;&nbsp;|&nbsp;&nbsp; Max Pain: **{max_pain:,.0f}**")
 
@@ -135,7 +179,6 @@ def render_dashboard():
         total_put_oi = df['put_oi'].sum()
         pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0
         
-        # Mapped specifically to match reference "Very Bullish" for PCR ~0.91-0.95
         if pcr >= 0.85:
             sentiment = "Very Bullish"
             gauge_val = 85
@@ -204,22 +247,34 @@ def render_dashboard():
 
     with col_m1:
         st.markdown("### Open Interest Change")
-        total_call_change = df['call_oi_change'].sum() / 1e7  # Converted to Cr for display
-        total_put_change = df['put_oi_change'].sum() / 1e7
+        total_call_change = round(df['call_oi_change'].sum() / 1e7, 2)
+        total_put_change = round(df['put_oi_change'].sum() / 1e7, 2)
         
         fig_change = go.Figure(data=[
-            go.Bar(x=['CALL', 'PUT'], y=[total_call_change, total_put_change], marker_color=['green', 'indianred'])
+            go.Bar(
+                x=['CALL', 'PUT'], 
+                y=[total_call_change, total_put_change], 
+                marker_color=['green', 'indianred'],
+                text=[f"{total_call_change}Cr", f"{total_put_change}Cr"],
+                textposition='auto'
+            )
         ])
         fig_change.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10), yaxis_title="In Crores (Cr)")
         st.plotly_chart(fig_change, use_container_width=True, key="oi_change_chart")
 
     with col_m2:
         st.markdown("### Total Open Interest")
-        tot_call_cr = total_call_oi / 1e7
-        tot_put_cr = total_put_oi / 1e7
+        tot_call_cr = round(total_call_oi / 1e7, 2)
+        tot_put_cr = round(total_put_oi / 1e7, 2)
         
         fig_total = go.Figure(data=[
-            go.Bar(x=['CALL', 'PUT'], y=[tot_call_cr, tot_put_cr], marker_color=['green', 'indianred'])
+            go.Bar(
+                x=['CALL', 'PUT'], 
+                y=[tot_call_cr, tot_put_cr], 
+                marker_color=['green', 'indianred'],
+                text=[f"{tot_call_cr}Cr", f"{tot_put_cr}Cr"],
+                textposition='auto'
+            )
         ])
         fig_total.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10), yaxis_title="In Crores (Cr)")
         st.plotly_chart(fig_total, use_container_width=True, key="total_oi_chart")
