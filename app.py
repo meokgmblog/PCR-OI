@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.graph_objects as go
+from datetime import datetime
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -57,6 +58,14 @@ if not expiries:
 
 selected_expiry = st.sidebar.selectbox("Select Expiry Date", expiries)
 
+# Strike Range Sliders
+st.sidebar.markdown("---")
+st.sidebar.subheader("Strike Range Filter")
+min_strike = st.sidebar.number_input("Min Strike", value=22300, step=50)
+max_strike = st.sidebar.number_input("Max Strike", value=23300, step=50)
+
+strike_depth = st.sidebar.selectbox("Strikes above-below ATM", [5, 10, 20, "All"], index=1)
+
 # --- FETCH DATA ---
 raw_chain_data = fetch_option_chain(instrument_key, selected_expiry)
 
@@ -71,12 +80,14 @@ spot_price = 0.0
 for item in raw_chain_data:
     strike = item.get("strike_price", 0)
     
+    # Call Data
     call_options = item.get("call_options", {})
     call_market_data = call_options.get("market_data", {})
     call_oi = call_market_data.get("oi", 0)
     call_oi_change = call_market_data.get("oi_change", 0)
     spot_price = call_market_data.get("underlying_spot_price", spot_price)
     
+    # Put Data
     put_options = item.get("put_options", {})
     put_market_data = put_options.get("market_data", {})
     put_oi = put_market_data.get("oi", 0)
@@ -92,31 +103,10 @@ for item in raw_chain_data:
 
 df = pd.DataFrame(parsed_rows)
 if spot_price == 0.0 and not df.empty:
-    spot_price = df['strike'].median()
+    spot_price = df['strike'].median() # Fallback
 
-# --- DEFAULT FILTERS TO MATCH DASHBOARD ---
-# Default to active ATM window (e.g., +/- 10 strikes or custom range like UI)
-st.sidebar.markdown("---")
-st.sidebar.subheader("Strike Range Filter")
-default_min = int(spot_price - 500) if spot_price > 0 else 22300
-default_max = int(spot_price + 500) if spot_price > 0 else 23300
-
-min_strike = st.sidebar.number_input("Min Strike", value=default_min, step=50)
-max_strike = st.sidebar.number_input("Max Strike", value=default_max, step=50)
-
-strike_depth = st.sidebar.selectbox("Strikes above-below ATM", [5, 10, 20, "All"], index=3)
-
-# Apply strike depth filter if selected
-if strike_depth != "All" and spot_price > 0:
-    step_size = 50
-    half_window = int(strike_depth) * step_size
-    min_strike = spot_price - half_window
-    max_strike = spot_price + half_window
-
-# Filtered DataFrame for calculations & charts
-df_filtered = df[(df['strike'] >= min_strike) & (df['strike'] <= max_strike)]
-if df_filtered.empty:
-    df_filtered = df # Fallback
+# Filter strikes based on range
+df = df[(df['strike'] >= min_strike) & (df['strike'] <= max_strike)]
 
 # --- MAX PAIN CALCULATION ---
 def calculate_max_pain(df_subset, spot):
@@ -134,27 +124,26 @@ def calculate_max_pain(df_subset, spot):
             max_pain_strike = strike
     return max_pain_strike
 
-max_pain = calculate_max_pain(df_filtered, spot_price)
+max_pain = calculate_max_pain(df, spot_price)
 
 # --- TOP METRICS HEADER ---
-col_h1, col_h2 = st.columns([2, 8])
+col_h1, col_h2, col_h3 = st.columns([2, 6, 2])
 with col_h1:
     st.markdown(f"### 🔵 {index_choice}")
 with col_h2:
     st.markdown(f"#### Spot: **{spot_price:,.2f}** &nbsp;&nbsp;|&nbsp;&nbsp; Max Pain: **{max_pain:,.0f}**")
 
-# --- LAYOUT SPLIT ---
+# --- LAYOUT SPLIT (SIDEBAR WIDGET + MAIN CHARTS) ---
 sidebar_container, main_container = st.columns([1, 2.5])
 
 with sidebar_container:
     st.markdown("### 📊 Market Sentiment (based on OI)")
     
-    # Accurate PCR computed strictly from the filtered active strike window
-    total_call_oi = df_filtered['call_oi'].sum()
-    total_put_oi = df_filtered['put_oi'].sum()
+    total_call_oi = df['call_oi'].sum()
+    total_put_oi = df['put_oi'].sum()
     pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0
     
-    # Gauge calculation matching target ranges
+    # Sentiment & Gauge calculation
     if pcr > 1.0:
         sentiment = "Very Bullish" if pcr > 1.15 else "Bullish"
         gauge_val = min(int((pcr / 1.5) * 100), 100)
@@ -169,6 +158,7 @@ with sidebar_container:
         gauge_val = max(min(int_val, 75), 25)
         gauge_color = "orange"
 
+    # Radial Gauge Chart
     fig_gauge = go.Figure(go.Indicator(
         mode="gauge+number+delta",
         value=gauge_val,
@@ -193,11 +183,11 @@ with sidebar_container:
     
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        st.markdown(f"**PCR:** `{pcr:.2f}` (+0.11)")
+        st.markdown(f"**PCR:** `{pcr:.2f}`")
     with col_p2:
         st.markdown(f"**PCR OI Chg:** `1.07`")
         
-    st.info(f"**Market Insight:** Market showing active participation around ATM strike {int(spot_price)}.")
+    st.info(f"**Market Insight:** Market showing active participation around ATM strikes {int(spot_price)}.")
     st.markdown("**Analysis:**")
     st.markdown(f"Call OI: `{total_call_oi:,.0f}` | Put OI: `{total_put_oi:,.0f}`.")
 
@@ -206,10 +196,10 @@ with main_container:
     fig_oi = go.Figure()
     
     fig_oi.add_trace(go.Bar(
-        x=df_filtered['strike'], y=df_filtered['call_oi'], name='Call OI', marker_color='green'
+        x=df['strike'], y=df['call_oi'], name='Call OI', marker_color='green'
     ))
     fig_oi.add_trace(go.Bar(
-        x=df_filtered['strike'], y=df_filtered['put_oi'], name='Put OI', marker_color='indianred'
+        x=df['strike'], y=df['put_oi'], name='Put OI', marker_color='indianred'
     ))
     
     fig_oi.add_vline(x=spot_price, line_dash="dash", line_color="orange", annotation_text=f"Spot: {spot_price}")
@@ -230,8 +220,8 @@ col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
     st.markdown("### Open Interest Change")
-    total_call_change = df_filtered['call_oi_change'].sum()
-    total_put_change = df_filtered['put_oi_change'].sum()
+    total_call_change = df['call_oi_change'].sum()
+    total_put_change = df['put_oi_change'].sum()
     
     fig_change = go.Figure(data=[
         go.Bar(x=['CALL', 'PUT'], y=[total_call_change, total_put_change], marker_color=['green', 'indianred'])
