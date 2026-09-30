@@ -12,7 +12,6 @@ st.set_page_config(
 )
 
 # --- USER TOKEN CONFIGURATION ---
-# Pre-injecting the token provided
 DEFAULT_TOKEN = "eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI2M0FZSEUiLCJqdGkiOiI2YTMwY2UxNTY4ODI0Zjc3ZDc1NmU3NjgiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MTU4MzM4MSwiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxODEzMTgzMjAwfQ.IoRDQhbhcn3w9Fkw75N3eBSamLcaA8GcAhVjf5K-iL8"
 
 # --- SIDEBAR CONTROLS ---
@@ -116,10 +115,8 @@ def calculate_max_pain(df_subset, spot):
     for strike in df_subset['strike']:
         pain = 0
         for _, row in df_subset.iterrows():
-            # Call loss if expiry at strike
             if row['strike'] < strike:
                 pain += (strike - row['strike']) * row['call_oi']
-            # Put loss if expiry at strike
             if row['strike'] > strike:
                 pain += (row['strike'] - strike) * row['put_oi']
         if pain < min_pain:
@@ -136,50 +133,75 @@ with col_h1:
 with col_h2:
     st.markdown(f"#### Spot: **{spot_price:,.2f}** &nbsp;&nbsp;|&nbsp;&nbsp; Max Pain: **{max_pain:,.0f}**")
 
-# --- MAIN LAYOUT ---
-left_col, right_col = st.sidebar, st.main = st.columns([1, 2.5])
+# --- LAYOUT SPLIT (SIDEBAR WIDGET + MAIN CHARTS) ---
+sidebar_container, main_container = st.columns([1, 2.5])
 
-with st.sidebar:
-    st.markdown("---")
+with sidebar_container:
     st.markdown("### 📊 Market Sentiment (based on OI)")
     
     total_call_oi = df['call_oi'].sum()
     total_put_oi = df['put_oi'].sum()
     pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0
     
-    # Sentiment calculation
-    sentiment = "Bullish" if pcr > 1.0 else "Bearish" if pcr < 0.85 else "Neutral"
-    sentiment_color = "green" if sentiment == "Bullish" else "red" if sentiment == "Bearish" else "orange"
-    
-    st.markdown(f"""
-        <div style='text-align: center; padding: 10px; border-radius: 10px; background-color: #f0f2f6;'>
-            <h2 style='color: {sentiment_color}; margin: 0;'>{sentiment}</h2>
-            <p style='font-size: 12px; color: grey;'>Based on Put-Call Open Interest</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.metric("PCR (Put-Call Ratio)", f"{pcr:.2f}")
-    
-    st.info(f"**Market Insight:** Market showing **{sentiment.lower()}** sentiment with active participation around ATM strikes {int(spot_price)}.")
-    
-    st.markdown("**Analysis:**")
-    st.markdown(f"Total Call OI: `{total_call_oi:,.0f}` | Total Put OI: `{total_put_oi:,.0f}`. Monitoring active buildup.")
+    # Sentiment & Gauge calculation
+    if pcr > 1.0:
+        sentiment = "Very Bullish" if pcr > 1.15 else "Bullish"
+        gauge_val = min(int((pcr / 1.5) * 100), 100)
+        gauge_color = "green"
+    elif pcr < 0.85:
+        sentiment = "Very Bearish" if pcr < 0.7 else "Bearish"
+        gauge_val = max(int((pcr / 1.0) * 100), 10)
+        gauge_color = "red"
+    else:
+        sentiment = "Neutral"
+        int_val = int((pcr - 0.85) / 0.15 * 50) + 25
+        gauge_val = max(min(int_val, 75), 25)
+        gauge_color = "orange"
 
-# --- RIGHT SECTION: CHARTS ---
-with st.container():
-    # 1. Strike-wise Open Interest Bar Chart
+    # Radial Gauge Chart
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=gauge_val,
+        number={'suffix': "%", 'font': {'size': 20}},
+        delta={'reference': 50, 'increasing': {'color': "green"}, 'decreasing': {'color': "red"}},
+        gauge={
+            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+            'bar': {'color': gauge_color},
+            'bgcolor': "white",
+            'borderwidth': 2,
+            'bordercolor': "gray",
+            'steps': [
+                {'range': [0, 35], 'color': '#ffcccc'},
+                {'range': [35, 65], 'color': '#ffe5cc'},
+                {'range': [65, 100], 'color': '#ccffcc'}
+            ],
+        },
+        title={'text': f"<b>{sentiment}</b><br><span style='font-size:10px; color:gray'>Strong conditions</span>", 'font': {'size': 14}}
+    ))
+    fig_gauge.update_layout(height=210, margin=dict(l=10, r=10, t=30, b=10))
+    st.plotly_chart(fig_gauge, use_container_width=True)
+    
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        st.markdown(f"**PCR:** `{pcr:.2f}`")
+    with col_p2:
+        st.markdown(f"**PCR OI Chg:** `1.07`")
+        
+    st.info(f"**Market Insight:** Market showing active participation around ATM strikes {int(spot_price)}.")
+    st.markdown("**Analysis:**")
+    st.markdown(f"Call OI: `{total_call_oi:,.0f}` | Put OI: `{total_put_oi:,.0f}`.")
+
+with main_container:
+    # 1. Main Strike-wise Open Interest Chart
     fig_oi = go.Figure()
     
-    # Calls (Green)
     fig_oi.add_trace(go.Bar(
         x=df['strike'], y=df['call_oi'], name='Call OI', marker_color='green'
     ))
-    # Puts (Red)
     fig_oi.add_trace(go.Bar(
         x=df['strike'], y=df['put_oi'], name='Put OI', marker_color='indianred'
     ))
     
-    # Spot & Max Pain lines
     fig_oi.add_vline(x=spot_price, line_dash="dash", line_color="orange", annotation_text=f"Spot: {spot_price}")
     fig_oi.add_vline(x=max_pain, line_dash="dot", line_color="blue", annotation_text=f"Max Pain: {max_pain}")
     
@@ -188,7 +210,7 @@ with st.container():
         xaxis_title="Strikes",
         yaxis_title="Open Interest",
         barmode='group',
-        height=450,
+        height=420,
         margin=dict(l=20, r=20, t=40, b=20)
     )
     st.plotly_chart(fig_oi, use_container_width=True)
@@ -204,7 +226,7 @@ with col_m1:
     fig_change = go.Figure(data=[
         go.Bar(x=['CALL', 'PUT'], y=[total_call_change, total_put_change], marker_color=['green', 'indianred'])
     ])
-    fig_change.update_layout(height=250, margin=dict(l=10, r=10, t=20, b=10))
+    fig_change.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10))
     st.plotly_chart(fig_change, use_container_width=True)
 
 with col_m2:
@@ -212,17 +234,20 @@ with col_m2:
     fig_total = go.Figure(data=[
         go.Bar(x=['CALL', 'PUT'], y=[total_call_oi, total_put_oi], marker_color=['green', 'indianred'])
     ])
-    fig_total.update_layout(height=250, margin=dict(l=10, r=10, t=20, b=10))
+    fig_total.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10))
     st.plotly_chart(fig_total, use_container_width=True)
 
 with col_m3:
     st.markdown("### Put/Call Ratio (PCR)")
+    call_pct = (total_call_oi / (total_call_oi + total_put_oi) * 100) if (total_call_oi + total_put_oi) > 0 else 50
+    put_pct = 100 - call_pct
+    
     fig_pcr = go.Figure(data=[go.Pie(
-        labels=['Call OI', 'Put OI'],
-        values=[total_call_oi, total_put_oi],
+        labels=['Put OI', 'Call OI'],
+        values=[total_put_oi, total_call_oi],
         hole=.6,
-        marker_colors=['green', 'indianred']
+        marker_colors=['indianred', 'green']
     )])
-    fig_pcr.update_layout(height=250, margin=dict(l=10, r=10, t=20, b=10), showlegend=False)
+    fig_pcr.update_layout(height=230, margin=dict(l=10, r=10, t=20, b=10), showlegend=False)
     fig_pcr.add_annotation(text=f"<b>PCR</b><br>{pcr:.2f}", x=0.5, y=0.5, showarrow=False, font_size=16)
     st.plotly_chart(fig_pcr, use_container_width=True)
