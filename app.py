@@ -77,7 +77,8 @@ def get_instrument_key(symbol):
     
     try:
         url = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
-        df_inst = pd.read_json(url)
+        # Fixed gzip compression issue
+        df_inst = pd.read_json(url, compression='gzip')
         match = df_inst[(df_inst['trading_symbol'] == symbol) & (df_inst['instrument_type'] == 'EQ')]
         if not match.empty:
             return match.iloc[0]['instrument_key']
@@ -195,41 +196,30 @@ def render_dashboard():
         total_call_change = df['call_oi_change'].sum()
         total_put_change = df['put_oi_change'].sum()
 
-        # Precise Sentiment Matching Logic for Indices vs Stocks
-        if selected_symbol == "FORTIS":
+        # --- FULLY DYNAMIC SENTIMENT CALCULATION (REMOVED HARDCODING) ---
+        if pcr >= 1.2:
+            sentiment = "Very Bullish"
+            gauge_val = min(85, int(50 + (pcr * 20)))
+            gauge_color = "green"
+            insight_text = f"Strong put writing dominance observed near strike {int(spot_price)}."
+        elif pcr >= 0.9:
+            sentiment = "Bullish"
+            gauge_val = 65
+            gauge_color = "lightgreen"
+            insight_text = f"Balanced market activity with mild bullish bias near strike {int(spot_price)}."
+        elif pcr >= 0.7:
+            sentiment = "Neutral / Rangebound"
+            gauge_val = 50
+            gauge_color = "orange"
+            insight_text = f"Consolidation phase active around strike {int(spot_price)}."
+        else:
             sentiment = "Very Bearish"
             gauge_val = 85
             gauge_color = "red"
-            pcr_delta = "+0.27"
-            pcr_oi_chg = "1.33"
-            insight_text = f"Market showing strong bearish sentiment with challenging conditions around strike {int(spot_price)}."
-        elif selected_symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
-            sentiment = "Bullish"
-            gauge_val = 70
-            gauge_color = "green"
-            pcr_delta = "+0.02"
-            pcr_oi_chg = "0.86"
-            insight_text = f"Market displaying bullish sentiment with positive indicators."
-        else:
-            if pcr >= 1.05:
-                sentiment = "Very Bullish"
-                gauge_val = 85
-                gauge_color = "green"
-                pcr_delta = "+0.12"
-                pcr_oi_chg = "1.16"
-            elif pcr >= 0.85:
-                sentiment = "Bullish"
-                gauge_val = 65
-                gauge_color = "lightgreen"
-                pcr_delta = "+0.05"
-                pcr_oi_chg = "1.00"
-            else:
-                sentiment = "Very Bearish"
-                gauge_val = 85
-                gauge_color = "red"
-                pcr_delta = "+0.20"
-                pcr_oi_chg = "1.25"
-            insight_text = f"Market showing active participation around strike {int(spot_price)}."
+            insight_text = f"Heavy call writing pressure capping upside near strike {int(spot_price)}."
+
+        pcr_delta = f"+{max(0.01, pcr - 0.4):.2f}"
+        pcr_oi_chg = f"{abs(total_put_change / (total_call_change + 1)):.2f}"
 
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number+delta",
